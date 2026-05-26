@@ -120,6 +120,68 @@ def render_markets(contracts: list[KalshiContract]) -> None:
     console.print(f"[dim]{len(contracts)} open weather contracts[/dim]")
 
 
+_SIGNAL_STYLE = {
+    "STRONG": "bold green",
+    "MODERATE": "yellow",
+    "WEAK": "dim cyan",
+    "NONE": "dim",
+}
+
+
+def _short_date(iso: str) -> str:
+    try:
+        from datetime import date
+        d = date.fromisoformat(iso)
+        return d.strftime("%b %d")
+    except ValueError:
+        return iso
+
+
+def render_scan(results, min_edge: float, bankroll: float) -> None:
+    """Phase 4 scan table: ranked edges with Kelly sizing."""
+    table = Table(title="Weather Edge Scan", header_style="bold cyan")
+    table.add_column("SIGNAL")
+    table.add_column("SIDE", justify="center")
+    table.add_column("CITY", style="bold")
+    table.add_column("DATE")
+    table.add_column("CONTRACT")
+    table.add_column("FCST", justify="right")
+    table.add_column("MODEL P", justify="right")
+    table.add_column("MKT $", justify="right")
+    table.add_column("EDGE", justify="right")
+    table.add_column("KELLY %", justify="right")
+    table.add_column("SIZE", justify="right")
+
+    total = 0.0
+    for r in results:
+        c = r.contract
+        style = _SIGNAL_STYLE.get(r.signal, "")
+        fval = "-" if r.forecast_value is None else (
+            f"{r.forecast_value:.2f}{c.unit}" if c.kind == "rain" else f"{r.forecast_value:.1f}{c.unit}"
+        )
+        total += r.bet_size
+        table.add_row(
+            f"[{style}]{r.signal}[/{style}]",
+            "[green]YES[/green]" if r.side == "YES" else "[red]NO[/red]",
+            c.city,
+            _short_date(c.date),
+            contract_label(c),
+            fval,
+            f"{r.model_prob*100:.0f}%",
+            f"${r.market_price:.2f}",
+            f"+{r.edge*100:.0f}¢",
+            f"{r.kelly_pct*100:.1f}%",
+            f"${r.bet_size:.0f}",
+        )
+
+    console.print(table)
+    cents = int(round(min_edge * 100))
+    console.print(
+        f"[bold]Found {len(results)} edges above {cents}¢ threshold[/bold] | "
+        f"Total suggested exposure: ${total:,.0f} / ${bankroll:,.0f} bankroll"
+    )
+
+
 def render_forecast_probs(forecasts: list[CityForecast], days: int, thresholds: list[float]) -> None:
     """Phase 3 forecast --probs table: consensus high, spread, P(>T)."""
     table = Table(title="Forecast Probabilities (consensus high)", header_style="bold cyan")
