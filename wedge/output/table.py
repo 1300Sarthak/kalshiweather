@@ -182,6 +182,42 @@ def render_scan(results, min_edge: float, bankroll: float) -> None:
     )
 
 
+def render_scan_verbose(results, orderbooks: dict | None = None) -> None:
+    """Per-edge detail: model breakdown, spread/confidence, orderbook depth."""
+    orderbooks = orderbooks or {}
+    for r in results:
+        c = r.contract
+        models = "  ".join(f"{m}={v:g}" for m, v in r.model_values.items()) or "single-model"
+        console.print(
+            f"[bold]{r.signal}[/bold] {r.side} [cyan]{c.city}[/cyan] {c.date} "
+            f"{contract_label(c)}  edge=+{r.edge*100:.0f}¢  kelly={r.kelly_pct*100:.1f}%  ${r.bet_size:.0f}"
+        )
+        agree = "[green]agree[/green]" if r.models_agree else "[red]disagree[/red]"
+        console.print(
+            f"    models: {models} | spread={r.model_spread:g}{c.unit} | "
+            f"confidence={r.confidence} | {agree} | model P={r.model_prob*100:.0f}% vs mkt ${r.market_price:.2f}"
+        )
+        ob = orderbooks.get(c.ticker)
+        if ob:
+            yd = ob.get("yes_depth") or []
+            nd = ob.get("no_depth") or []
+            top_yes = ", ".join(f"${float(p):.2f}x{float(s):g}" for p, s in yd[-3:][::-1]) or "-"
+            top_no = ", ".join(f"${float(p):.2f}x{float(s):g}" for p, s in nd[-3:][::-1]) or "-"
+            console.print(f"    book: yes[{top_yes}]  no[{top_no}]")
+        console.print()
+
+
+def quiet_line(r, city_code: str) -> str:
+    """Machine-readable one-line edge: signal,city,date,type_thr,p,mkt,edge,size."""
+    c = r.contract
+    edge_signed = f"+{r.edge:.2f}" if r.side == "YES" else f"-{r.edge:.2f}"
+    type_thr = f"{c.contract_type}_{c.threshold:g}"
+    return (
+        f"{r.signal},{city_code},{c.date},{type_thr},"
+        f"{r.model_prob:.2f},{r.market_price:.2f},{edge_signed},{r.bet_size:.2f}"
+    )
+
+
 def render_forecast_probs(forecasts: list[CityForecast], days: int, thresholds: list[float]) -> None:
     """Phase 3 forecast --probs table: consensus high, spread, P(>T)."""
     table = Table(title="Forecast Probabilities (consensus high)", header_style="bold cyan")

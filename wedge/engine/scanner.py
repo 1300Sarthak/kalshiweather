@@ -29,6 +29,8 @@ class EdgeResult:
     forecast_value: float | None  # consensus high/low/precip used
     models_agree: bool
     confidence: str
+    model_values: dict[str, float]  # per-model forecast value (for --verbose)
+    model_spread: float             # cross-model spread for this contract's metric
 
 
 def _model_prob_yes(cons: ConsensusDay, c: KalshiContract) -> tuple[float | None, float | None]:
@@ -71,6 +73,21 @@ def _models_agree(cf: CityForecast, c: KalshiContract) -> bool:
         return True
     over = [v > c.threshold for v in vals]
     return all(over) or not any(over)
+
+
+def _model_breakdown(cf: CityForecast, c: KalshiContract) -> tuple[dict[str, float], float]:
+    """Per-model forecast values for this contract's metric + their spread."""
+    days = cf.day_across_models(c.date)
+    attr = {"high": "high_f", "low": "low_f", "wind": "wind_max_mph", "rain": "precip_inches"}.get(
+        c.kind, "high_f"
+    )
+    vals: dict[str, float] = {}
+    for d in days:
+        v = getattr(d, attr)
+        if v is not None:
+            vals[d.model_label] = round(float(v), 1)
+    spread = (max(vals.values()) - min(vals.values())) if len(vals) > 1 else 0.0
+    return vals, round(spread, 1)
 
 
 def build_results(
@@ -118,6 +135,7 @@ def build_results(
             continue
 
         kpct = kelly_fraction(edge, price, cfg.max_kelly)
+        mvals, mspread = _model_breakdown(cf, c)
         results.append(
             EdgeResult(
                 contract=c,
@@ -131,6 +149,8 @@ def build_results(
                 forecast_value=fval,
                 models_agree=_models_agree(cf, c),
                 confidence=cons.confidence,
+                model_values=mvals,
+                model_spread=mspread,
             )
         )
 
@@ -167,3 +187,16 @@ async def scan(
         return [], False
 
     return build_results(forecasts, markets_res, cfg, ensembles), True
+
+
+async def fetch_orderbooks(results: list[EdgeResult]) -> dict[str, dict]:
+    """Fetch orderbook depth for the given results (used by --verbose)."""
+    if not results:
+        return {}
+    async with client_session() as client:
+        tickers = [r.contract.ticker for r in results]
+        books = await asyncio.gather(
+            *(kalshi_client.get_market_orderbook(client, t) for t in tickers),
+            return_exceptions=True,
+        )
+    return {t: b for t, b in zip(tickers, books) if not isinstance(b, Exception)}
