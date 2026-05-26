@@ -34,7 +34,9 @@ def cli() -> None:
 @cli.command()
 @click.option("--city", default=None, help="City code (e.g. NYC) or name; default all.")
 @click.option("--days", default=None, type=int, help="Forecast days to show (default 7).")
-def forecast(city: str | None, days: int | None) -> None:
+@click.option("--probs", is_flag=True, help="Show consensus high + P(>threshold) columns.")
+@click.option("--threshold", default=None, type=float, help="Center threshold for --probs (default 90).")
+def forecast(city: str | None, days: int | None, probs: bool, threshold: float | None) -> None:
     """Show multi-model weather forecasts."""
     cfg = Config()
     n_days = days or cfg.forecast_days
@@ -45,7 +47,12 @@ def forecast(city: str | None, days: int | None) -> None:
             return await open_meteo.fetch_all(client, cities, n_days)
 
     forecasts = asyncio.run(run())
-    out_table.render_forecast(forecasts, n_days)
+    if probs:
+        center = threshold if threshold is not None else 90.0
+        thresholds = [center - 5, center, center + 5]
+        out_table.render_forecast_probs(forecasts, n_days, thresholds)
+    else:
+        out_table.render_forecast(forecasts, n_days)
 
 
 def _resolve_kinds(type_opt: str | None) -> set[str] | None:
