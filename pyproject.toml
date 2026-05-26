@@ -1,0 +1,23 @@
+[project]
+name = "wedge"
+version = "0.1.0"
+description = "Weather Edge Scanner — find mispricings between weather models and Kalshi prediction markets"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "httpx>=0.27",
+    "rich>=13.7",
+    "python-dotenv>=1.0",
+    "pydantic>=2.7",
+]
+
+[project.scripts]
+wedge = "wedge.cli:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["wedge"]
