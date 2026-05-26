@@ -5,9 +5,14 @@ from __future__ import annotations
 from rich.console import Console
 from rich.table import Table
 
+from ..kalshi.models import KalshiContract
 from ..weather.models import CityForecast
 
 console = Console()
+
+
+def _price(v: float | None) -> str:
+    return "-" if v is None else f"${v:.2f}"
 
 
 def _fmt(v: float | None, suffix: str = "", digits: int = 0) -> str:
@@ -66,6 +71,53 @@ def render_forecast(forecasts: list[CityForecast], days: int) -> None:
         table.add_section()
 
     console.print(table)
+
+
+_TYPE_LABEL = {
+    "high_over": "High >", "high_under": "High <",
+    "low_over": "Low >", "low_under": "Low <",
+    "rain_over": "Rain >", "rain_under": "Rain <",
+    "wind_over": "Wind >", "wind_under": "Wind <",
+}
+
+
+def contract_label(c: KalshiContract) -> str:
+    """Human label like 'High >90°F' or 'Rain >0.1in'."""
+    base = _TYPE_LABEL.get(c.contract_type, c.contract_type)
+    thr = f"{c.threshold:g}{c.unit}"
+    return f"{base}{thr}"
+
+
+def render_markets(contracts: list[KalshiContract]) -> None:
+    """Phase 2 markets table."""
+    table = Table(title="Kalshi Weather Markets", header_style="bold cyan")
+    table.add_column("Ticker", style="dim")
+    table.add_column("City", style="bold")
+    table.add_column("Date")
+    table.add_column("Type")
+    table.add_column("Thr", justify="right")
+    table.add_column("Bid", justify="right")
+    table.add_column("Ask", justify="right")
+    table.add_column("Mid", justify="right")
+    table.add_column("Spr", justify="right")
+    table.add_column("Vol", justify="right")
+
+    contracts = sorted(contracts, key=lambda c: (c.city, c.date, c.contract_type, c.threshold))
+    for c in contracts:
+        table.add_row(
+            c.ticker,
+            c.city,
+            c.date,
+            _TYPE_LABEL.get(c.contract_type, c.contract_type).strip(),
+            f"{c.threshold:g}{c.unit}",
+            _price(c.yes_bid),
+            _price(c.yes_ask),
+            _price(c.mid_price),
+            _price(c.spread),
+            f"{c.volume:,}",
+        )
+    console.print(table)
+    console.print(f"[dim]{len(contracts)} open weather contracts[/dim]")
 
 
 def render_forecast_probs(forecasts: list[CityForecast], days: int, thresholds: list[float]) -> None:
